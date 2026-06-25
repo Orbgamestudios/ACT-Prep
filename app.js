@@ -1,6 +1,7 @@
 const GEMINI_MODEL = "gemini-2.5-flash";
 const STORE_KEY = "actLikeReadingLab";
 const SETTINGS_KEY = "actLikeReadingLabSettings";
+const PROFILE_KEY = "actLikeReadingLabProfile";
 const TODAY_COUNT = 2;
 const DEFAULT_WORKER_URL = "https://actprep.solitary-sky-76c1.workers.dev";
 
@@ -98,6 +99,8 @@ const SOURCES = [
 
 const els = {
   geminiKey: document.querySelector("#geminiKey"),
+  settingsButton: document.querySelector("#settingsButton"),
+  profileButton: document.querySelector("#profileButton"),
   workerUrl: document.querySelector("#workerUrl"),
   syncToken: document.querySelector("#syncToken"),
   autoDaily: document.querySelector("#autoDaily"),
@@ -114,8 +117,19 @@ const els = {
   practiceTitle: document.querySelector("#practiceTitle"),
   passageText: document.querySelector("#passageText"),
   questionForm: document.querySelector("#questionForm"),
-  showAnswers: document.querySelector("#showAnswers"),
+  questions: document.querySelector("#questions"),
+  submitAnswers: document.querySelector("#submitAnswers"),
+  scoreSummary: document.querySelector("#scoreSummary"),
   installButton: document.querySelector("#installButton"),
+  settingsDialog: document.querySelector("#settingsDialog"),
+  profileDialog: document.querySelector("#profileDialog"),
+  profileName: document.querySelector("#profileName"),
+  profilePin: document.querySelector("#profilePin"),
+  loginProfile: document.querySelector("#loginProfile"),
+  logoutProfile: document.querySelector("#logoutProfile"),
+  profileStatus: document.querySelector("#profileStatus"),
+  profilePill: document.querySelector("#profilePill"),
+  profileDetails: document.querySelector("#profileDetails"),
   dialog: document.querySelector("#messageDialog"),
   dialogTitle: document.querySelector("#dialogTitle"),
   dialogBody: document.querySelector("#dialogBody")
@@ -154,6 +168,22 @@ function saveStore(store) {
   localStorage.setItem(STORE_KEY, JSON.stringify(store));
 }
 
+function loadProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveProfile(profile) {
+  if (!profile) {
+    localStorage.removeItem(PROFILE_KEY);
+    return;
+  }
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
 function showMessage(title, body) {
   els.dialogTitle.textContent = title;
   els.dialogBody.textContent = body;
@@ -174,6 +204,18 @@ function setBusy(isBusy, label = "Generate Today") {
 function updateStatus() {
   const settings = loadSettings();
   els.statusPill.textContent = settings.workerUrl ? "Cloud" : "Local";
+}
+
+function updateProfileUi() {
+  const profile = loadProfile();
+  const completions = Object.keys(profile?.completed || {}).length;
+  els.profileStatus.textContent = profile ? `${profile.name} · ${completions} completed` : "Not signed in";
+  els.profilePill.textContent = profile ? "Signed in" : "Guest";
+  els.profileDetails.textContent = profile
+    ? `${profile.name} has ${completions} completed passage${completions === 1 ? "" : "s"} synced.`
+    : "Sign in to sync completed passages across devices.";
+  els.profileName.value = profile?.name || "";
+  els.profilePin.value = "";
 }
 
 function cleanGutenbergText(text) {
@@ -360,6 +402,60 @@ async function fetchFromCloudflare(date = todayIso()) {
   return Array.isArray(data.items) ? data.items : [];
 }
 
+async function requestWorker(path, options = {}) {
+  const { workerUrl } = loadSettings();
+  const base = normalizeWorkerUrl(workerUrl);
+  if (!base) throw new Error("Worker URL is missing.");
+  const response = await fetch(`${base}${path}`, options);
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) throw new Error(data.error || `Request failed: HTTP ${response.status}`);
+  return data;
+}
+
+async function loginProfile() {
+  const name = els.profileName.value.trim();
+  const pin = els.profilePin.value.trim();
+  if (!name) {
+    showMessage("Name needed", "Enter a name for this profile.");
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    showMessage("PIN needed", "Enter a 4 digit PIN.");
+    return;
+  }
+
+  els.loginProfile.disabled = true;
+  try {
+    const data = await requestWorker("/api/profile/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, pin })
+    });
+    saveProfile(data.profile);
+    applyCompletionsToStore(data.profile.completed || {});
+    updateProfileUi();
+    renderLibrary();
+    showMessage("Signed in", `Profile ready for ${data.profile.name}.`);
+  } catch (error) {
+    showMessage("Profile failed", error.message);
+  } finally {
+    els.loginProfile.disabled = false;
+  }
+}
+
+function applyCompletionsToStore(completed) {
+  const store = loadStore();
+  store.passages = store.passages.map((item) => ({
+    ...item,
+    completed: Boolean(completed[item.id]),
+    score: completed[item.id]?.score ?? item.score,
+    answers: completed[item.id]?.answers ?? item.answers,
+    completedAt: completed[item.id]?.completedAt ?? item.completedAt
+  }));
+  saveStore(store);
+}
+
 async function generateWithWorker(date, slot, guide, key) {
   const { workerUrl, syncToken } = loadSettings();
   const base = normalizeWorkerUrl(workerUrl);
@@ -497,6 +593,163 @@ function gradeVisibleAnswers() {
   });
 }
 
+function renderLibrary() {
+  const store = loadStore();
+  els.library.innerHTML = "";
+
+  if (!store.passages.length) {
+    const empty = document.createElement("p");
+    empty.className = "finePrint";
+    empty.textContent = "No saved practice sets yet.";
+    els.library.append(empty);
+    return;
+  }
+
+  store.passages.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `libraryItem${item.id === selectedId ? " active" : ""}`;
+    button.innerHTML = `<strong></strong><span></span>`;
+    button.querySelector("strong").textContent = item.title;
+    const done = item.completed ? ` · Completed ${item.score ?? ""}/${item.questions.length}` : "";
+    button.querySelector("span").textContent = `${item.date} · ${item.passageType} · ${item.questions.length} questions${done}`;
+    button.addEventListener("click", () => selectPractice(item.id));
+    els.library.append(button);
+  });
+}
+
+function selectPractice(id) {
+  const item = loadStore().passages.find((passage) => passage.id === id);
+  if (!item) return;
+
+  selectedId = id;
+  answersVisible = false;
+  els.emptyState.hidden = true;
+  els.practiceView.hidden = false;
+  els.questionForm.classList.remove("answersVisible");
+  els.submitAnswers.disabled = false;
+  els.submitAnswers.textContent = item.completed ? "Answers Shown" : "Submit Answers";
+  els.scoreSummary.textContent = item.completed && Number.isFinite(item.score)
+    ? `Completed: ${item.score}/${item.questions.length}`
+    : "";
+  els.practiceMeta.textContent = `${item.passageType} · ${item.source} · ${item.estimatedWords || "?"} words`;
+  els.practiceTitle.textContent = item.title;
+  els.passageText.innerHTML = passageHtml(item.passage);
+  renderQuestions(item);
+  if (item.completed) {
+    els.questionForm.classList.add("answersVisible");
+    gradeVisibleAnswers(item.answers || {});
+  }
+  renderLibrary();
+}
+
+function renderQuestions(item) {
+  els.questions.innerHTML = "";
+  item.questions.forEach((question, index) => {
+    const block = document.createElement("section");
+    block.className = "question";
+    const prompt = document.createElement("div");
+    prompt.className = "questionPrompt";
+    prompt.textContent = `${index + 1}. ${question.question}`;
+    block.append(prompt);
+
+    const choices = document.createElement("div");
+    choices.className = "choices";
+    ["A", "B", "C", "D"].forEach((label) => {
+      const choice = document.createElement("label");
+      choice.className = "choice";
+      choice.dataset.label = label;
+      choice.innerHTML = `<input type="radio" name="q${index}" value="${label}"><span></span>`;
+      choice.querySelector("span").textContent = `${label}. ${question.choices[label]}`;
+      if (item.answers?.[index] === label) choice.querySelector("input").checked = true;
+      choices.append(choice);
+    });
+    block.append(choices);
+
+    const explanation = document.createElement("p");
+    explanation.className = "explanation";
+    explanation.textContent = `Answer ${question.answer}. ${question.evidence || ""}`;
+    block.append(explanation);
+    els.questions.append(block);
+  });
+}
+
+function selectedAnswers(item) {
+  const answers = {};
+  item.questions.forEach((question, index) => {
+    answers[index] = els.questionForm.querySelector(`input[name="q${index}"]:checked`)?.value || "";
+  });
+  return answers;
+}
+
+function gradeVisibleAnswers(answers = null) {
+  const item = loadStore().passages.find((passage) => passage.id === selectedId);
+  if (!item) return;
+  const chosen = answers || selectedAnswers(item);
+
+  item.questions.forEach((question, index) => {
+    const selected = chosen[index];
+    els.questionForm.querySelectorAll(`input[name="q${index}"]`).forEach((input) => {
+      const choice = input.closest(".choice");
+      choice.classList.toggle("correct", input.value === question.answer);
+      choice.classList.toggle("incorrect", Boolean(selected) && input.value === selected && selected !== question.answer);
+    });
+  });
+}
+
+async function submitAnswers(event) {
+  event.preventDefault();
+  const item = loadStore().passages.find((passage) => passage.id === selectedId);
+  if (!item) return;
+  const answers = selectedAnswers(item);
+  const unanswered = Object.values(answers).filter((answer) => !answer).length;
+  if (unanswered) {
+    showMessage("Questions left", `Answer all questions before submitting. ${unanswered} left.`);
+    return;
+  }
+
+  const score = item.questions.reduce((sum, question, index) => sum + (answers[index] === question.answer ? 1 : 0), 0);
+  els.questionForm.classList.add("answersVisible");
+  els.submitAnswers.textContent = "Answers Shown";
+  els.scoreSummary.textContent = `Score: ${score}/${item.questions.length}`;
+  gradeVisibleAnswers(answers);
+  await markCompleted(item, answers, score);
+}
+
+async function markCompleted(item, answers, score) {
+  const completedAt = new Date().toISOString();
+  const store = loadStore();
+  store.passages = store.passages.map((passage) => passage.id === item.id
+    ? { ...passage, completed: true, answers, score, completedAt }
+    : passage);
+  saveStore(store);
+
+  const profile = loadProfile();
+  if (profile) {
+    profile.completed = {
+      ...(profile.completed || {}),
+      [item.id]: { answers, score, total: item.questions.length, completedAt }
+    };
+    saveProfile(profile);
+    updateProfileUi();
+    try {
+      await requestWorker("/api/profile/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: profile.name,
+          pin: profile.pin,
+          passageId: item.id,
+          completion: profile.completed[item.id]
+        })
+      });
+    } catch (error) {
+      console.warn(error.message);
+    }
+  }
+  renderLibrary();
+}
+
 async function generateToday() {
   const settings = {
     geminiKey: els.geminiKey.value.trim(),
@@ -577,9 +830,22 @@ function initSettings() {
   els.autoDaily.checked = settings.autoDaily !== false;
   els.loadDate.value = todayIso();
   updateStatus();
+  updateProfileUi();
 }
 
 function wireEvents() {
+  els.settingsButton.addEventListener("click", () => els.settingsDialog.showModal());
+  els.profileButton.addEventListener("click", () => {
+    updateProfileUi();
+    els.profileDialog.showModal();
+  });
+  els.loginProfile.addEventListener("click", loginProfile);
+  els.logoutProfile.addEventListener("click", () => {
+    saveProfile(null);
+    updateProfileUi();
+    renderLibrary();
+  });
+
   els.saveSettings.addEventListener("click", () => {
     saveSettings({
       geminiKey: els.geminiKey.value.trim(),
@@ -594,12 +860,7 @@ function wireEvents() {
   els.generateToday.addEventListener("click", generateToday);
   els.refreshLibrary.addEventListener("click", () => refreshLibrary(todayIso()));
   els.loadDateButton.addEventListener("click", () => refreshLibrary(els.loadDate.value || todayIso()));
-  els.showAnswers.addEventListener("click", () => {
-    answersVisible = !answersVisible;
-    els.questionForm.classList.toggle("answersVisible", answersVisible);
-    els.showAnswers.textContent = answersVisible ? "Hide Answers" : "Show Answers";
-    if (answersVisible) gradeVisibleAnswers();
-  });
+  els.questionForm.addEventListener("submit", submitAnswers);
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
@@ -625,10 +886,12 @@ async function registerServiceWorker() {
 initSettings();
 wireEvents();
 renderLibrary();
+if (loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
 registerServiceWorker().catch(() => {});
 refreshLibrary().then(() => {
   const settings = loadSettings();
   const todayCount = loadStore().passages.filter((item) => item.date === todayIso()).length;
+  if (!selectedId && loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
   if (settings.autoDaily !== false && settings.geminiKey && todayCount < TODAY_COUNT) {
     generateToday();
   }

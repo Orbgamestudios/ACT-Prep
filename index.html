@@ -14,14 +14,57 @@
       <p class="eyebrow">Unofficial Reading Practice</p>
       <h1>ACT-Like Reading Lab</h1>
     </div>
-    <button id="installButton" class="iconButton" type="button" hidden title="Install app" aria-label="Install app">+</button>
+    <div class="topActions">
+      <button id="profileButton" class="topButton" type="button">Profile</button>
+      <button id="settingsButton" class="topButton" type="button">Settings</button>
+      <button id="installButton" class="iconButton" type="button" hidden title="Install app" aria-label="Install app">+</button>
+    </div>
   </header>
 
   <main class="shell">
-    <section class="panel settingsPanel" aria-labelledby="settingsTitle">
+    <section class="panel libraryPanel" aria-labelledby="libraryTitle">
       <div class="panelHeader">
-        <h2 id="settingsTitle">Setup</h2>
-        <span id="statusPill" class="pill">Local</span>
+        <div>
+          <h2 id="libraryTitle">Practice Library</h2>
+          <p id="profileStatus" class="miniStatus">Not signed in</p>
+        </div>
+        <button id="refreshLibrary" class="textButton" type="button">Refresh</button>
+      </div>
+      <button id="generateToday" class="wideButton" type="button">Generate Today</button>
+      <div id="library" class="library"></div>
+    </section>
+
+    <section class="reader" aria-live="polite">
+      <div id="emptyState" class="emptyState">
+        <h2>Generate today’s two passages to begin.</h2>
+        <p>Each set uses a free public-domain excerpt and asks Gemini to construct nine ACT-like questions from the markdown guide in this folder.</p>
+      </div>
+
+      <article id="practiceView" class="practiceView" hidden>
+        <div class="practiceHeader">
+          <div>
+            <p id="practiceMeta" class="eyebrow"></p>
+            <h2 id="practiceTitle"></h2>
+          </div>
+        </div>
+
+        <div id="passageText" class="passageText"></div>
+        <form id="questionForm" class="questionForm">
+          <div id="questions"></div>
+          <div class="submitBar">
+            <p id="scoreSummary" class="scoreSummary"></p>
+            <button id="submitAnswers" type="submit">Submit Answers</button>
+          </div>
+        </form>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="settingsDialog">
+    <form method="dialog">
+      <div class="dialogHeader">
+        <h2>Settings</h2>
+        <span id="statusPill" class="pill">Cloud</span>
       </div>
 
       <label class="field">
@@ -58,40 +101,39 @@
 
       <div class="actions">
         <button id="saveSettings" type="button">Save</button>
-        <button id="generateToday" type="button">Generate Today</button>
+        <button type="submit" class="textButton">Close</button>
       </div>
 
-      <p class="finePrint">Generates two public-domain passage sets per day. Your Gemini key is sent only to the configured Worker for generation and is not saved in Cloudflare.</p>
-    </section>
+      <p class="finePrint">Your Gemini key is sent only to the configured Worker for generation and is not saved in Cloudflare.</p>
+    </form>
+  </dialog>
 
-    <section class="panel libraryPanel" aria-labelledby="libraryTitle">
-      <div class="panelHeader">
-        <h2 id="libraryTitle">Practice Library</h2>
-        <button id="refreshLibrary" class="textButton" type="button">Refresh</button>
-      </div>
-      <div id="library" class="library"></div>
-    </section>
-
-    <section class="reader" aria-live="polite">
-      <div id="emptyState" class="emptyState">
-        <h2>Generate today’s two passages to begin.</h2>
-        <p>Each set uses a free public-domain excerpt and asks Gemini to construct nine ACT-like questions from the markdown guide in this folder.</p>
+  <dialog id="profileDialog">
+    <form method="dialog">
+      <div class="dialogHeader">
+        <h2>Profile</h2>
+        <span id="profilePill" class="pill">Guest</span>
       </div>
 
-      <article id="practiceView" class="practiceView" hidden>
-        <div class="practiceHeader">
-          <div>
-            <p id="practiceMeta" class="eyebrow"></p>
-            <h2 id="practiceTitle"></h2>
-          </div>
-          <button id="showAnswers" class="textButton" type="button">Show Answers</button>
-        </div>
+      <label class="field">
+        <span>Name</span>
+        <input id="profileName" type="text" autocomplete="username" placeholder="Your name">
+      </label>
 
-        <div id="passageText" class="passageText"></div>
-        <form id="questionForm" class="questionForm"></form>
-      </article>
-    </section>
-  </main>
+      <label class="field">
+        <span>4 digit PIN</span>
+        <input id="profilePin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="1234">
+      </label>
+
+      <div class="actions">
+        <button id="loginProfile" type="button">Login / Create</button>
+        <button id="logoutProfile" class="textButton" type="button">Logout</button>
+      </div>
+
+      <p id="profileDetails" class="finePrint">Sign in to sync completed passages across devices.</p>
+      <button type="submit" class="wideButton textButton">Close</button>
+    </form>
+  </dialog>
 
   <dialog id="messageDialog">
     <form method="dialog">
@@ -101,6 +143,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

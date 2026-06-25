@@ -49,6 +49,21 @@ button:disabled {
   opacity: 0.6;
 }
 
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.topButton {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -86,7 +101,7 @@ button:disabled {
 .shell {
   display: grid;
   grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   gap: 16px;
   padding: 16px;
   max-width: 1320px;
@@ -101,19 +116,14 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
-.settingsPanel {
-  grid-column: 1;
-}
-
 .libraryPanel {
   grid-column: 1;
-  grid-row: 2;
   min-height: 280px;
 }
 
 .reader {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   min-height: calc(100vh - 122px);
 }
 
@@ -122,12 +132,19 @@ button:disabled {
 }
 
 .panelHeader,
-.practiceHeader {
+.practiceHeader,
+.dialogHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.miniStatus {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 h2 {
@@ -213,6 +230,11 @@ input {
   margin-top: 14px;
 }
 
+.wideButton {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
 .finePrint {
   color: var(--muted);
   font-size: 0.86rem;
@@ -228,6 +250,7 @@ input {
 .library {
   display: grid;
   gap: 10px;
+  margin-top: 14px;
 }
 
 .libraryItem {
@@ -250,6 +273,7 @@ input {
 .libraryItem span {
   color: var(--muted);
   font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .emptyState {
@@ -308,18 +332,27 @@ input {
   margin: 0 auto 40px;
 }
 
+#questions {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
 .question {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--paper);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.question legend {
-  width: 100%;
+.questionPrompt {
   margin-bottom: 12px;
   font-weight: 750;
   line-height: 1.4;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .choices {
@@ -329,13 +362,18 @@ input {
 
 .choice {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+}
+
+.choice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .choice input {
@@ -365,11 +403,34 @@ input {
   display: block;
 }
 
+.submitBar {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0 0;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.scoreSummary {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
 dialog {
   max-width: min(420px, calc(100vw - 30px));
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+}
+
+dialog form {
+  min-width: min(360px, calc(100vw - 66px));
 }
 
 dialog::backdrop {
@@ -381,7 +442,6 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
-  .settingsPanel,
   .libraryPanel,
   .reader {
     grid-column: 1;
@@ -396,8 +456,23 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
+  .submitBar {
+    grid-template-columns: 1fr;
+  }
+
   .practiceView {
     padding: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .topButton {
+    min-height: 34px;
+    padding: 0 9px;
   }
 }
 

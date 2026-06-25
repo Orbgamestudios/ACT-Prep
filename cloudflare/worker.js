@@ -82,6 +82,56 @@ export default {
       return json({ ok: true, item });
     }
 
+    if (url.pathname === "/api/profile/login" && request.method === "POST") {
+      const body = await request.json();
+      const name = cleanName(body.name);
+      const pin = String(body.pin || "");
+      if (!name) return json({ ok: false, error: "Name is required." }, 400);
+      if (!/^\d{4}$/.test(pin)) return json({ ok: false, error: "A 4 digit PIN is required." }, 400);
+
+      const key = profileKey(name);
+      const pinHash = await hashPin(name, pin);
+      const existing = await env.ACT_PASSAGES.get(key, "json");
+      if (existing && existing.pinHash !== pinHash) {
+        return json({ ok: false, error: "That PIN does not match this profile." }, 401);
+      }
+
+      const profile = existing || {
+        name,
+        pinHash,
+        completed: {},
+        createdAt: new Date().toISOString()
+      };
+      profile.lastLoginAt = new Date().toISOString();
+      await env.ACT_PASSAGES.put(key, JSON.stringify(profile));
+      return json({ ok: true, profile: publicProfile(profile, pin) });
+    }
+
+    if (url.pathname === "/api/profile/complete" && request.method === "POST") {
+      const body = await request.json();
+      const name = cleanName(body.name);
+      const pin = String(body.pin || "");
+      const passageId = String(body.passageId || "");
+      if (!name || !/^\d{4}$/.test(pin) || !passageId) {
+        return json({ ok: false, error: "Name, PIN, and passage ID are required." }, 400);
+      }
+
+      const key = profileKey(name);
+      const profile = await env.ACT_PASSAGES.get(key, "json");
+      if (!profile) return json({ ok: false, error: "Profile not found." }, 404);
+      if (profile.pinHash !== await hashPin(name, pin)) {
+        return json({ ok: false, error: "That PIN does not match this profile." }, 401);
+      }
+
+      profile.completed = {
+        ...(profile.completed || {}),
+        [passageId]: sanitizeCompletion(body.completion)
+      };
+      profile.updatedAt = new Date().toISOString();
+      await env.ACT_PASSAGES.put(key, JSON.stringify(profile));
+      return json({ ok: true, profile: publicProfile(profile, pin) });
+    }
+
     return json({ ok: false, error: "Method not allowed" }, 405);
   }
 };
@@ -122,6 +172,39 @@ function authorized(request, env) {
 
 function keyFor(date) {
   return `passages/${date}.json`;
+}
+
+function profileKey(name) {
+  return `profiles/${name.toLowerCase()}.json`;
+}
+
+function cleanName(name) {
+  return String(name || "").trim().replace(/\s+/g, " ").slice(0, 48);
+}
+
+async function hashPin(name, pin) {
+  const input = new TextEncoder().encode(`${name.toLowerCase()}::${pin}`);
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function publicProfile(profile, pin) {
+  return {
+    name: profile.name,
+    pin,
+    completed: profile.completed || {},
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt || profile.lastLoginAt
+  };
+}
+
+function sanitizeCompletion(completion = {}) {
+  return {
+    answers: completion.answers || {},
+    score: Number(completion.score || 0),
+    total: Number(completion.total || 0),
+    completedAt: completion.completedAt || new Date().toISOString()
+  };
 }
 
 function validDate(date) {
