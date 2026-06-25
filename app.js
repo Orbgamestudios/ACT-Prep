@@ -3,6 +3,59 @@ const STORE_KEY = "actLikeReadingLab";
 const SETTINGS_KEY = "actLikeReadingLabSettings";
 const TODAY_COUNT = 2;
 
+const LOCAL_PASSAGES = [
+  {
+    title: "The Souls of Black Folk",
+    author: "W. E. B. Du Bois",
+    type: "Informational",
+    excerpt: `Between me and the other world there is ever an unasked question: unasked by some through feelings of delicacy; by others through the difficulty of rightly framing it. All, nevertheless, flutter round it. They approach me in a half-hesitant sort of way, eye me curiously or compassionately, and then, instead of saying directly, How does it feel to be a problem? they say, I know an excellent colored man in my town; or, I fought at Mechanicsville; or, Do not these Southern outrages make your blood boil?
+
+At these I smile, or am interested, or reduce the boiling to a simmer, as the occasion may require. To the real question, How does it feel to be a problem? I answer seldom a word.
+
+And yet, being a problem is a strange experience, peculiar even for one who has never been anything else, save perhaps in babyhood and in Europe. It is in the early days of rollicking boyhood that the revelation first bursts upon one, all in a day, as it were. I remember well when the shadow swept across me. I was a little thing, away up in the hills of New England, where the dark Housatonic winds between Hoosac and Taghkanic to the sea.
+
+In a wee wooden schoolhouse, something put it into the boys' and girls' heads to buy gorgeous visiting-cards, ten cents a package, and exchange. The exchange was merry, till one girl, a tall newcomer, refused my card, refused it peremptorily, with a glance. Then it dawned upon me with a certain suddenness that I was different from the others; or like, mayhap, in heart and life and longing, but shut out from their world by a vast veil.`
+  },
+  {
+    title: "A Room with a View",
+    author: "E. M. Forster",
+    type: "Literary Narrative",
+    excerpt: `"The Signora had no business to do it," said Miss Bartlett, "no business at all. She promised us south rooms with a view close together, instead of which here are north rooms, looking into a courtyard, and a long way apart. Oh, Lucy!"
+
+"And a Cockney, besides!" said Lucy, who had been further saddened by the Signora's unexpected accent. "It might be London." She looked at the two rows of English people who were sitting at the table; at the row of white bottles of water and red bottles of wine that ran between the English people; at the portraits of the late Queen and the late Poet Laureate that hung behind the English people, heavily framed; at the notice of the English church pinned by the door; and at the two little old ladies who were sitting further up the table, and who had asked if there was a church.
+
+"Charlotte, don't you feel, too, that we might be in London? I can hardly believe that all kinds of other things are just outside. I suppose it is one's being so tired."
+
+"This meat has surely been used for soup," said Miss Bartlett, laying down her fork.
+
+"I want so to see the Arno. The rooms the Signora promised us in her letter would have looked over the Arno. The Signora had no business to do it at all."`
+  },
+  {
+    title: "The Voyage of the Beagle",
+    author: "Charles Darwin",
+    type: "Informational",
+    excerpt: `The scene, as beheld from the anchorage, was very striking. The regular volcanic outline of the island, the high table-land, and the many cones rising from it, gave it a remarkable appearance. The whole island, from the black lava streams to the summits of the craters, was covered by a thin layer of burnt-looking vegetation.
+
+The shore is formed chiefly of black, rugged rocks, against which the sea breaks with violence. A little further inland the lava is broken into rough fragments, and in the hollows there is a scanty growth of coarse grass and low shrubs. Every object seemed marked by the same dry and desolate character.
+
+Yet this apparent sterility was not without interest. The plants and animals, though few in number, were unlike those of the mainland. They appeared to have been formed for the peculiar conditions of the place: heat, drought, and a soil that had only slowly begun to crumble into earth. It was impossible to walk among them without reflecting on the strange relation between living forms and the circumstances in which they are placed.
+
+The naturalist, in such a country, is not rewarded by abundance, but by singularity. Each small fact seems to have a value greater than it would possess in a richer scene. A bird, a lizard, or a plant growing from a crack in the lava becomes evidence of a larger history, written not in books but in the distribution of life itself.`
+  },
+  {
+    title: "The Secret Garden",
+    author: "Frances Hodgson Burnett",
+    type: "Literary Narrative",
+    excerpt: `When Mary Lennox was sent to Misselthwaite Manor to live with her uncle everybody said she was the most disagreeable-looking child ever seen. It was true, too. She had a little thin face and a little thin body, thin light hair and a sour expression.
+
+Her hair was yellow, and her face was yellow because she had been born in India and had always been ill in one way or another. Her father had held a position under the English Government and had always been busy and ill himself, and her mother had been a great beauty who cared only to go to parties and amuse herself with gay people.
+
+She had not wanted a little girl at all, and when Mary was born she handed her over to the care of an Ayah, who was made to understand that if she wished to please the Mem Sahib she must keep the child out of sight as much as possible.
+
+So when she was a sickly, fretful, ugly little baby she was kept out of the way, and when she became a sickly, fretful, toddling thing she was kept out of the way also. She never remembered seeing familiarly anything but the dark faces of her Ayah and the other native servants, and as they always obeyed her and gave her her own way in everything, because the Mem Sahib would be angry if she was disturbed by her crying, by the time she was six years old she was as tyrannical and selfish a little pig as ever lived.`
+  }
+];
+
 const SOURCES = [
   {
     title: "The Souls of Black Folk",
@@ -239,11 +292,26 @@ async function generateWithGemini({ key, guide, source, excerpt }) {
 
 async function generatePracticeSet(date, slot, key, guide) {
   const source = SOURCES[seededIndex(`${date}-${slot}`, SOURCES.length)];
-  const sourceResponse = await fetch(source.url);
-  if (!sourceResponse.ok) throw new Error(`Could not fetch ${source.title}.`);
-  const raw = await sourceResponse.text();
-  const excerpt = makeExcerpt(cleanGutenbergText(raw), `${date}-${slot}-${source.title}`);
-  const generated = await generateWithGemini({ key, guide, source, excerpt });
+  let excerpt;
+  try {
+    const sourceResponse = await fetch(source.url);
+    if (!sourceResponse.ok) throw new Error(`HTTP ${sourceResponse.status}`);
+    const raw = await sourceResponse.text();
+    excerpt = makeExcerpt(cleanGutenbergText(raw), `${date}-${slot}-${source.title}`);
+  } catch {
+    const local = LOCAL_PASSAGES[seededIndex(`${date}-${slot}`, LOCAL_PASSAGES.length)];
+    source.title = local.title;
+    source.author = local.author;
+    source.type = local.type;
+    excerpt = local.excerpt;
+  }
+
+  let generated;
+  try {
+    generated = await generateWithGemini({ key, guide, source, excerpt });
+  } catch (error) {
+    throw new Error(`Gemini generation failed. ${error.message}`);
+  }
 
   return {
     id: `${date}-${slot}`,
@@ -271,7 +339,7 @@ async function syncToCloudflare(items) {
     body: JSON.stringify({ date: todayIso(), items })
   });
 
-  if (!response.ok) throw new Error(`Cloudflare sync failed: ${response.status}`);
+  if (!response.ok) throw new Error(`Cloudflare sync failed: HTTP ${response.status}`);
 }
 
 async function fetchFromCloudflare(date = todayIso()) {
@@ -283,9 +351,30 @@ async function fetchFromCloudflare(date = todayIso()) {
     headers: syncToken ? { "x-sync-token": syncToken } : {}
   });
   if (response.status === 404) return [];
-  if (!response.ok) throw new Error(`Cloudflare load failed: ${response.status}`);
+  if (!response.ok) throw new Error(`Cloudflare load failed: HTTP ${response.status}`);
   const data = await response.json();
   return Array.isArray(data.items) ? data.items : [];
+}
+
+async function generateWithWorker(date, slot, guide, key) {
+  const { workerUrl, syncToken } = loadSettings();
+  const base = normalizeWorkerUrl(workerUrl);
+  if (!base) return null;
+
+  const response = await fetch(`${base}/api/generate`, {
+    method: "POST",
+    headers: {
+      ...cloudHeaders(syncToken),
+      "x-gemini-key": key
+    },
+    body: JSON.stringify({ date, slot, guide })
+  });
+
+  if (response.status === 404 || response.status === 405) return null;
+  if (!response.ok) throw new Error(`Worker generation failed: HTTP ${response.status}`);
+  const data = await response.json();
+  if (!data.item) throw new Error("Worker generation returned no practice set.");
+  return data.item;
 }
 
 function cloudHeaders(syncToken) {
@@ -426,11 +515,22 @@ async function generateToday() {
     const generated = [];
     for (let slot = existing.length + 1; slot <= TODAY_COUNT; slot += 1) {
       els.generateToday.textContent = `Generating ${slot}/${TODAY_COUNT}...`;
-      generated.push(await generatePracticeSet(date, slot, key, guide));
+      let workerItem = null;
+      try {
+        workerItem = await generateWithWorker(date, slot, guide, key);
+      } catch (error) {
+        console.warn(error.message);
+      }
+      generated.push(workerItem || await generatePracticeSet(date, slot, key, guide));
     }
 
     upsertPassages(generated);
-    await syncToCloudflare(loadStore().passages.filter((item) => item.date === date));
+    try {
+      await syncToCloudflare(loadStore().passages.filter((item) => item.date === date));
+    } catch (error) {
+      console.warn(error.message);
+      showMessage("Saved locally", `${error.message}. Your generated sets were saved in this browser, but not Cloudflare yet.`);
+    }
     renderLibrary();
     selectPractice(generated[0].id);
   } catch (error) {

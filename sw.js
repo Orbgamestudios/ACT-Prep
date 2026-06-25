@@ -1,9 +1,9 @@
-const CACHE_NAME = "act-like-reading-lab-v3";
+const CACHE_NAME = "act-like-reading-lab-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js?v=3",
+  "./app.js?v=5",
   "./manifest.webmanifest",
   "./question-construction.md",
   "./icon.svg"
@@ -26,6 +26,19 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+
+  if (request.mode === "navigate" || request.headers.get("accept")?.includes("text/html")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
+          return response;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {
