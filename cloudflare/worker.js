@@ -82,7 +82,7 @@ export default {
       return json({ ok: true, item });
     }
 
-    if (url.pathname === "/api/profile/login" && request.method === "POST") {
+    if ((url.pathname === "/api/profile/login" || url.pathname === "/api/profile/create") && request.method === "POST") {
       const body = await request.json();
       const name = cleanName(body.name);
       const pin = String(body.pin || "");
@@ -92,6 +92,12 @@ export default {
       const key = profileKey(name);
       const pinHash = await hashPin(name, pin);
       const existing = await env.ACT_PASSAGES.get(key, "json");
+      if (url.pathname === "/api/profile/create" && existing) {
+        return json({ ok: false, error: "That profile already exists. Use Login instead." }, 409);
+      }
+      if (url.pathname === "/api/profile/login" && !existing) {
+        return json({ ok: false, error: "Profile not found. Create an account first." }, 404);
+      }
       if (existing && existing.pinHash !== pinHash) {
         return json({ ok: false, error: "That PIN does not match this profile." }, 401);
       }

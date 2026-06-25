@@ -31,6 +31,8 @@
         <button id="refreshLibrary" class="textButton" type="button">Refresh</button>
       </div>
       <button id="generateToday" class="wideButton" type="button">Generate Today</button>
+      <button id="generateExtra" class="wideButton textButton" type="button">Generate Extra Passage</button>
+      <div id="profileStats" class="statsPanel" hidden></div>
       <div id="library" class="library"></div>
     </section>
 
@@ -126,12 +128,16 @@
       </label>
 
       <div class="actions">
-        <button id="loginProfile" type="button">Login / Create</button>
+        <button id="loginProfile" type="button">Login</button>
+        <button id="createProfile" class="textButton" type="button">Create Account</button>
+      </div>
+
+      <div class="actions">
         <button id="logoutProfile" class="textButton" type="button">Logout</button>
+        <button type="submit" class="textButton">Close</button>
       </div>
 
       <p id="profileDetails" class="finePrint">Sign in to sync completed passages across devices.</p>
-      <button type="submit" class="wideButton textButton">Close</button>
     </form>
   </dialog>
 
@@ -143,6 +149,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

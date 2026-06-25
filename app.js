@@ -108,8 +108,10 @@ const els = {
   loadDateButton: document.querySelector("#loadDateButton"),
   saveSettings: document.querySelector("#saveSettings"),
   generateToday: document.querySelector("#generateToday"),
+  generateExtra: document.querySelector("#generateExtra"),
   refreshLibrary: document.querySelector("#refreshLibrary"),
   library: document.querySelector("#library"),
+  profileStats: document.querySelector("#profileStats"),
   statusPill: document.querySelector("#statusPill"),
   emptyState: document.querySelector("#emptyState"),
   practiceView: document.querySelector("#practiceView"),
@@ -126,6 +128,7 @@ const els = {
   profileName: document.querySelector("#profileName"),
   profilePin: document.querySelector("#profilePin"),
   loginProfile: document.querySelector("#loginProfile"),
+  createProfile: document.querySelector("#createProfile"),
   logoutProfile: document.querySelector("#logoutProfile"),
   profileStatus: document.querySelector("#profileStatus"),
   profilePill: document.querySelector("#profilePill"),
@@ -196,6 +199,7 @@ function normalizeWorkerUrl(url) {
 
 function setBusy(isBusy, label = "Generate Today") {
   els.generateToday.disabled = isBusy;
+  els.generateExtra.disabled = isBusy;
   els.refreshLibrary.disabled = isBusy;
   els.saveSettings.disabled = isBusy;
   els.generateToday.textContent = isBusy ? "Working..." : label;
@@ -208,12 +212,28 @@ function updateStatus() {
 
 function updateProfileUi() {
   const profile = loadProfile();
-  const completions = Object.keys(profile?.completed || {}).length;
+  const completedItems = Object.values(profile?.completed || {}).sort((a, b) =>
+    String(b.completedAt || "").localeCompare(String(a.completedAt || ""))
+  );
+  const completions = completedItems.length;
+  const recent = completedItems.slice(0, 10);
+  const earned = recent.reduce((sum, item) => sum + Number(item.score || 0), 0);
+  const total = recent.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const accuracy = total ? Math.round((earned / total) * 100) : 0;
   els.profileStatus.textContent = profile ? `${profile.name} · ${completions} completed` : "Not signed in";
   els.profilePill.textContent = profile ? "Signed in" : "Guest";
   els.profileDetails.textContent = profile
-    ? `${profile.name} has ${completions} completed passage${completions === 1 ? "" : "s"} synced.`
+    ? `${profile.name} · ${accuracy}% accuracy across the last ${recent.length || 0} passage${recent.length === 1 ? "" : "s"}.`
     : "Sign in to sync completed passages across devices.";
+  els.profileStats.hidden = !profile;
+  if (profile) {
+    els.profileStats.innerHTML = `
+      <div class="stat"><strong>${accuracy}%</strong><span>Last 10 accuracy</span></div>
+      <div class="stat"><strong>${completions}</strong><span>Completed</span></div>
+    `;
+  } else {
+    els.profileStats.innerHTML = "";
+  }
   els.profileName.value = profile?.name || "";
   els.profilePin.value = "";
 }
@@ -413,7 +433,7 @@ async function requestWorker(path, options = {}) {
   return data;
 }
 
-async function loginProfile() {
+async function submitProfile(mode) {
   const name = els.profileName.value.trim();
   const pin = els.profilePin.value.trim();
   if (!name) {
@@ -426,8 +446,9 @@ async function loginProfile() {
   }
 
   els.loginProfile.disabled = true;
+  els.createProfile.disabled = true;
   try {
-    const data = await requestWorker("/api/profile/login", {
+    const data = await requestWorker(`/api/profile/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, pin })
@@ -436,11 +457,12 @@ async function loginProfile() {
     applyCompletionsToStore(data.profile.completed || {});
     updateProfileUi();
     renderLibrary();
-    showMessage("Signed in", `Profile ready for ${data.profile.name}.`);
+    showMessage(mode === "create" ? "Account created" : "Signed in", `Profile ready for ${data.profile.name}.`);
   } catch (error) {
     showMessage("Profile failed", error.message);
   } finally {
     els.loginProfile.disabled = false;
+    els.createProfile.disabled = false;
   }
 }
 
@@ -750,7 +772,16 @@ async function markCompleted(item, answers, score) {
   renderLibrary();
 }
 
-async function generateToday() {
+function settingsFromInputs() {
+  return {
+    geminiKey: els.geminiKey.value.trim(),
+    workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
+    syncToken: els.syncToken.value.trim(),
+    autoDaily: els.autoDaily.checked
+  };
+}
+
+async function generatePassageBatch({ extra = false } = {}) {
   const settings = {
     geminiKey: els.geminiKey.value.trim(),
     workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
@@ -770,7 +801,7 @@ async function generateToday() {
   try {
     const date = todayIso();
     const existing = loadStore().passages.filter((item) => item.date === date);
-    if (existing.length >= TODAY_COUNT) {
+    if (!extra && existing.length >= TODAY_COUNT) {
       showMessage("Already generated", "Today already has two practice sets saved.");
       return;
     }
@@ -781,8 +812,12 @@ async function generateToday() {
     });
 
     const generated = [];
-    for (let slot = existing.length + 1; slot <= TODAY_COUNT; slot += 1) {
-      els.generateToday.textContent = `Generating ${slot}/${TODAY_COUNT}...`;
+    const existingSlots = existing.map((item) => Number(item.slot || item.id?.split("-").pop() || 0));
+    const startSlot = Math.max(0, ...existingSlots) + 1;
+    const targetCount = extra ? 1 : Math.max(0, TODAY_COUNT - existing.length);
+    for (let offset = 0; offset < targetCount; offset += 1) {
+      const slot = startSlot + offset;
+      els.generateToday.textContent = extra ? "Generating extra..." : `Generating ${offset + 1}/${targetCount}...`;
       let workerItem = null;
       try {
         workerItem = await generateWithWorker(date, slot, guide, key);
@@ -808,6 +843,14 @@ async function generateToday() {
   }
 }
 
+async function generateToday() {
+  await generatePassageBatch({ extra: false });
+}
+
+async function generateExtraPassage() {
+  await generatePassageBatch({ extra: true });
+}
+
 async function refreshLibrary(date = todayIso()) {
   setBusy(true, "Generate Today");
   try {
@@ -824,6 +867,10 @@ async function refreshLibrary(date = todayIso()) {
 
 function initSettings() {
   const settings = loadSettings();
+  const emptyTitle = els.emptyState.querySelector("h2");
+  const emptyCopy = els.emptyState.querySelector("p");
+  if (emptyTitle) emptyTitle.textContent = "No passage selected";
+  if (emptyCopy) emptyCopy.textContent = "Select a saved passage or generate a new one.";
   els.geminiKey.value = settings.geminiKey || "";
   els.workerUrl.value = settings.workerUrl || DEFAULT_WORKER_URL;
   els.syncToken.value = settings.syncToken || "";
@@ -839,7 +886,8 @@ function wireEvents() {
     updateProfileUi();
     els.profileDialog.showModal();
   });
-  els.loginProfile.addEventListener("click", loginProfile);
+  els.loginProfile.addEventListener("click", () => submitProfile("login"));
+  els.createProfile.addEventListener("click", () => submitProfile("create"));
   els.logoutProfile.addEventListener("click", () => {
     saveProfile(null);
     updateProfileUi();
@@ -858,6 +906,7 @@ function wireEvents() {
   });
 
   els.generateToday.addEventListener("click", generateToday);
+  els.generateExtra.addEventListener("click", generateExtraPassage);
   els.refreshLibrary.addEventListener("click", () => refreshLibrary(todayIso()));
   els.loadDateButton.addEventListener("click", () => refreshLibrary(els.loadDate.value || todayIso()));
   els.questionForm.addEventListener("submit", submitAnswers);
