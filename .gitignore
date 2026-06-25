@@ -1,2 +1,3 @@
 .sync-token
 cloudflare/.sync-token
+cloudflare/.wrangler/
