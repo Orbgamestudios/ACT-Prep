@@ -1,0 +1,7 @@
+name = "act-prep-passages"
+main = "worker.js"
+compatibility_date = "2026-06-25"
+
+[[kv_namespaces]]
+binding = "ACT_PASSAGES"
+id = "replace-with-your-kv-namespace-id"

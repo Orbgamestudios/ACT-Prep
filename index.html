@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17324d">
+  <title>ACT-Like Reading Lab</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Unofficial Reading Practice</p>
+      <h1>ACT-Like Reading Lab</h1>
+    </div>
+    <button id="installButton" class="iconButton" type="button" hidden title="Install app" aria-label="Install app">+</button>
+  </header>
+
+  <main class="shell">
+    <section class="panel settingsPanel" aria-labelledby="settingsTitle">
+      <div class="panelHeader">
+        <h2 id="settingsTitle">Setup</h2>
+        <span id="statusPill" class="pill">Local</span>
+      </div>
+
+      <label class="field">
+        <span>Gemini API key</span>
+        <input id="geminiKey" type="password" autocomplete="off" placeholder="AIza...">
+      </label>
+
+      <label class="field">
+        <span>Cloudflare Worker URL</span>
+        <input id="workerUrl" type="url" inputmode="url" placeholder="https://your-worker.workers.dev">
+      </label>
+
+      <label class="field">
+        <span>Cloudflare sync token</span>
+        <input id="syncToken" type="password" autocomplete="off" placeholder="Optional Worker token">
+      </label>
+
+      <label class="checkField">
+        <input id="autoDaily" type="checkbox">
+        <span>Generate two new sets automatically each day</span>
+      </label>
+
+      <div class="dateRow">
+        <label class="field">
+          <span>Load date</span>
+          <input id="loadDate" type="date">
+        </label>
+        <button id="loadDateButton" class="textButton" type="button">Load</button>
+      </div>
+
+      <div class="actions">
+        <button id="saveSettings" type="button">Save</button>
+        <button id="generateToday" type="button">Generate Today</button>
+      </div>
+
+      <p class="finePrint">Generates two public-domain passage sets per day. Keys stay in this browser; generated practice can sync to your Worker when configured.</p>
+    </section>
+
+    <section class="panel libraryPanel" aria-labelledby="libraryTitle">
+      <div class="panelHeader">
+        <h2 id="libraryTitle">Practice Library</h2>
+        <button id="refreshLibrary" class="textButton" type="button">Refresh</button>
+      </div>
+      <div id="library" class="library"></div>
+    </section>
+
+    <section class="reader" aria-live="polite">
+      <div id="emptyState" class="emptyState">
+        <h2>Generate today’s two passages to begin.</h2>
+        <p>Each set uses a free public-domain excerpt and asks Gemini to construct nine ACT-like questions from the markdown guide in this folder.</p>
+      </div>
+
+      <article id="practiceView" class="practiceView" hidden>
+        <div class="practiceHeader">
+          <div>
+            <p id="practiceMeta" class="eyebrow"></p>
+            <h2 id="practiceTitle"></h2>
+          </div>
+          <button id="showAnswers" class="textButton" type="button">Show Answers</button>
+        </div>
+
+        <div id="passageText" class="passageText"></div>
+        <form id="questionForm" class="questionForm"></form>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="messageDialog">
+    <form method="dialog">
+      <h2 id="dialogTitle">Notice</h2>
+      <p id="dialogBody"></p>
+      <button type="submit">OK</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=3"></script>
+</body>
+</html>
