@@ -158,6 +158,20 @@ h2 {
   font-weight: 700;
 }
 
+.advanced {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
 .checkField {
   display: grid;
   grid-template-columns: 20px 1fr;

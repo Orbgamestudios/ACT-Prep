@@ -29,15 +29,19 @@
         <input id="geminiKey" type="password" autocomplete="off" placeholder="AIza...">
       </label>
 
-      <label class="field">
-        <span>Cloudflare Worker URL</span>
-        <input id="workerUrl" type="url" inputmode="url" placeholder="https://your-worker.workers.dev">
-      </label>
+      <details class="advanced">
+        <summary>Advanced cloud settings</summary>
 
-      <label class="field">
-        <span>Cloudflare sync token</span>
-        <input id="syncToken" type="password" autocomplete="off" placeholder="Optional Worker token">
-      </label>
+        <label class="field">
+          <span>Cloudflare Worker URL</span>
+          <input id="workerUrl" type="url" inputmode="url" placeholder="https://your-worker.workers.dev">
+        </label>
+
+        <label class="field">
+          <span>Admin sync token</span>
+          <input id="syncToken" type="password" autocomplete="off" placeholder="Optional admin token">
+        </label>
+      </details>
 
       <label class="checkField">
         <input id="autoDaily" type="checkbox">
@@ -57,7 +61,7 @@
         <button id="generateToday" type="button">Generate Today</button>
       </div>
 
-      <p class="finePrint">Generates two public-domain passage sets per day. Keys stay in this browser; generated practice can sync to your Worker when configured.</p>
+      <p class="finePrint">Generates two public-domain passage sets per day. Your Gemini key is sent only to the configured Worker for generation and is not saved in Cloudflare.</p>
     </section>
 
     <section class="panel libraryPanel" aria-labelledby="libraryTitle">
@@ -97,6 +101,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

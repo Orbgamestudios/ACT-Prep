@@ -2,6 +2,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const STORE_KEY = "actLikeReadingLab";
 const SETTINGS_KEY = "actLikeReadingLabSettings";
 const TODAY_COUNT = 2;
+const DEFAULT_WORKER_URL = "https://actprep.solitary-sky-76c1.workers.dev";
 
 const LOCAL_PASSAGES = [
   {
@@ -128,9 +129,12 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 
 function loadSettings() {
   try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+    return {
+      workerUrl: DEFAULT_WORKER_URL,
+      ...(JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {})
+    };
   } catch {
-    return {};
+    return { workerUrl: DEFAULT_WORKER_URL };
   }
 }
 
@@ -169,7 +173,7 @@ function setBusy(isBusy, label = "Generate Today") {
 
 function updateStatus() {
   const settings = loadSettings();
-  els.statusPill.textContent = settings.workerUrl ? "Cloud Sync" : "Local";
+  els.statusPill.textContent = settings.workerUrl ? "Cloud" : "Local";
 }
 
 function cleanGutenbergText(text) {
@@ -371,7 +375,10 @@ async function generateWithWorker(date, slot, guide, key) {
   });
 
   if (response.status === 404 || response.status === 405) return null;
-  if (!response.ok) throw new Error(`Worker generation failed: HTTP ${response.status}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Worker generation failed: HTTP ${response.status}. ${errorText.slice(0, 220)}`);
+  }
   const data = await response.json();
   if (!data.item) throw new Error("Worker generation returned no practice set.");
   return data.item;
@@ -491,7 +498,15 @@ function gradeVisibleAnswers() {
 }
 
 async function generateToday() {
-  const settings = loadSettings();
+  const settings = {
+    geminiKey: els.geminiKey.value.trim(),
+    workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
+    syncToken: els.syncToken.value.trim(),
+    autoDaily: els.autoDaily.checked
+  };
+  saveSettings(settings);
+  updateStatus();
+
   const key = settings.geminiKey;
   if (!key) {
     showMessage("Gemini key needed", "Paste your Gemini API key into Setup before generating practice.");
@@ -519,6 +534,7 @@ async function generateToday() {
       try {
         workerItem = await generateWithWorker(date, slot, guide, key);
       } catch (error) {
+        if (settings.workerUrl) throw error;
         console.warn(error.message);
       }
       generated.push(workerItem || await generatePracticeSet(date, slot, key, guide));
@@ -529,7 +545,6 @@ async function generateToday() {
       await syncToCloudflare(loadStore().passages.filter((item) => item.date === date));
     } catch (error) {
       console.warn(error.message);
-      showMessage("Saved locally", `${error.message}. Your generated sets were saved in this browser, but not Cloudflare yet.`);
     }
     renderLibrary();
     selectPractice(generated[0].id);
@@ -557,7 +572,7 @@ async function refreshLibrary(date = todayIso()) {
 function initSettings() {
   const settings = loadSettings();
   els.geminiKey.value = settings.geminiKey || "";
-  els.workerUrl.value = settings.workerUrl || "";
+  els.workerUrl.value = settings.workerUrl || DEFAULT_WORKER_URL;
   els.syncToken.value = settings.syncToken || "";
   els.autoDaily.checked = settings.autoDaily !== false;
   els.loadDate.value = todayIso();

@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,x-sync-token"
+  "Access-Control-Allow-Headers": "Content-Type,x-sync-token,x-gemini-key"
 };
 
 export default {
@@ -12,7 +12,6 @@ export default {
 
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return json({ ok: false, error: "Not found" }, 404);
-    if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, 401);
 
     if (url.pathname === "/api/passages" && request.method === "GET") {
       const date = url.searchParams.get("date") || todayIso();
@@ -22,6 +21,7 @@ export default {
     }
 
     if (url.pathname === "/api/passages" && request.method === "POST") {
+      if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json();
       if (!validDate(body.date) || !Array.isArray(body.items)) {
         return json({ ok: false, error: "Expected { date, items }." }, 400);
