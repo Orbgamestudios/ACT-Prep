@@ -139,6 +139,59 @@ export default {
       return json({ ok: true, profile: publicProfile(profile, pin) });
     }
 
+    if (url.pathname === "/api/profile/import" && request.method === "POST") {
+      const body = await request.json();
+      const name = cleanName(body.name);
+      const pin = String(body.pin || "");
+      const items = Array.isArray(body.items) ? body.items.map(sanitizePassage).filter(Boolean) : [];
+      if (!name || !/^\d{4}$/.test(pin)) {
+        return json({ ok: false, error: "Name and PIN are required." }, 400);
+      }
+      if (!items.length) return json({ ok: false, error: "No passages to import." }, 400);
+
+      const key = profileKey(name);
+      const profile = await env.ACT_PASSAGES.get(key, "json");
+      if (!profile) return json({ ok: false, error: "Profile not found." }, 404);
+      if (profile.pinHash !== await hashPin(name, pin)) {
+        return json({ ok: false, error: "That PIN does not match this profile." }, 401);
+      }
+
+      const byDate = new Map();
+      for (const item of items) {
+        if (!byDate.has(item.date)) byDate.set(item.date, []);
+        byDate.get(item.date).push(item);
+      }
+
+      for (const [date, dateItems] of byDate) {
+        const existing = await env.ACT_PASSAGES.get(keyFor(date), "json");
+        const merged = Array.isArray(existing?.items) ? existing.items : [];
+        for (const item of dateItems) {
+          const index = merged.findIndex((entry) => entry.id === item.id);
+          if (index >= 0) merged[index] = { ...merged[index], ...item };
+          else merged.push(item);
+        }
+        await env.ACT_PASSAGES.put(keyFor(date), JSON.stringify({
+          date,
+          items: merged,
+          updatedAt: new Date().toISOString()
+        }));
+      }
+
+      const refs = items.map((item) => ({
+        id: item.id,
+        date: item.date,
+        title: item.title,
+        createdAt: item.createdAt || new Date().toISOString()
+      }));
+      const generated = Array.isArray(profile.generated) ? profile.generated : [];
+      profile.generated = [...refs, ...generated]
+        .filter((entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index)
+        .slice(0, 200);
+      profile.updatedAt = new Date().toISOString();
+      await env.ACT_PASSAGES.put(key, JSON.stringify(profile));
+      return json({ ok: true, profile: publicProfile(profile, pin), imported: items.length });
+    }
+
     return json({ ok: false, error: "Method not allowed" }, 405);
   }
 };
@@ -228,6 +281,27 @@ function sanitizeCompletion(completion = {}) {
     score: Number(completion.score || 0),
     total: Number(completion.total || 0),
     completedAt: completion.completedAt || new Date().toISOString()
+  };
+}
+
+function sanitizePassage(item = {}) {
+  if (!item.id || !validDate(item.date) || !Array.isArray(item.questions)) return null;
+  return {
+    id: String(item.id),
+    date: item.date,
+    slot: Number(item.slot || 0),
+    createdAt: item.createdAt || new Date().toISOString(),
+    title: String(item.title || "Untitled Passage").slice(0, 160),
+    source: String(item.source || "Public-domain source").slice(0, 240),
+    passageType: String(item.passageType || "Informational").slice(0, 80),
+    difficulty: String(item.difficulty || "Medium").slice(0, 40),
+    estimatedWords: Number(item.estimatedWords || 0),
+    passage: String(item.passage || ""),
+    questions: item.questions.slice(0, 12),
+    completed: Boolean(item.completed),
+    answers: item.answers || undefined,
+    score: Number.isFinite(Number(item.score)) ? Number(item.score) : undefined,
+    completedAt: item.completedAt || undefined
   };
 }
 

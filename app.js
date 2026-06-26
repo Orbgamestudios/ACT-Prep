@@ -471,7 +471,8 @@ async function submitProfile(mode) {
     });
     saveProfile(data.profile);
     applyCompletionsToStore(data.profile.completed || {});
-    await loadProfileGeneratedPassages(data.profile);
+    await importLocalPassagesToProfile();
+    await loadProfileGeneratedPassages(loadProfile());
     updateProfileUi();
     renderLibrary();
     showMessage(mode === "create" ? "Account created" : "Signed in", `Profile ready for ${data.profile.name}.`);
@@ -480,6 +481,28 @@ async function submitProfile(mode) {
   } finally {
     els.loginProfile.disabled = false;
     els.createProfile.disabled = false;
+  }
+}
+
+async function importLocalPassagesToProfile() {
+  const profile = loadProfile();
+  if (!profile) return;
+  const items = loadStore().passages;
+  if (!items.length) return;
+
+  try {
+    const data = await requestWorker("/api/profile/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: profile.name,
+        pin: profile.pin,
+        items
+      })
+    });
+    if (data.profile) saveProfile(data.profile);
+  } catch (error) {
+    console.warn(error.message);
   }
 }
 
