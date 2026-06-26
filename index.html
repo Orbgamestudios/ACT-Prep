@@ -171,6 +171,22 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=13"></script>
+  <dialog id="geminiKeyDialog">
+    <form method="dialog">
+      <h2>Gemini Key Needed</h2>
+      <p>This app can show saved passages, but it cannot generate new ACT-like practice until you add a Gemini API key.</p>
+      <ol class="steps">
+        <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio API keys</a>.</li>
+        <li>Sign in with Google and choose Create API key.</li>
+        <li>Copy the key, open Settings here, and paste it into Gemini API key.</li>
+      </ol>
+      <div class="actions">
+        <button id="openSettingsFromKeyPrompt" type="button">Open Settings</button>
+        <button type="submit" class="textButton">Later</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=14"></script>
 </body>
 </html>

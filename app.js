@@ -142,6 +142,8 @@ const els = {
   iosInstallDialog: document.querySelector("#iosInstallDialog"),
   hideIosInstall: document.querySelector("#hideIosInstall"),
   hideIosInstallForever: document.querySelector("#hideIosInstallForever"),
+  geminiKeyDialog: document.querySelector("#geminiKeyDialog"),
+  openSettingsFromKeyPrompt: document.querySelector("#openSettingsFromKeyPrompt"),
   dialog: document.querySelector("#messageDialog"),
   dialogTitle: document.querySelector("#dialogTitle"),
   dialogBody: document.querySelector("#dialogBody")
@@ -943,6 +945,11 @@ function wireEvents() {
     localStorage.setItem(IOS_INSTALL_HIDE_KEY, "1");
     els.iosInstallDialog.close();
   });
+  els.openSettingsFromKeyPrompt.addEventListener("click", () => {
+    els.geminiKeyDialog.close();
+    els.settingsDialog.showModal();
+    els.geminiKey.focus();
+  });
 
   els.generateToday.addEventListener("click", generateToday);
   els.generateExtra.addEventListener("click", generateExtraPassage);
@@ -1004,6 +1011,16 @@ function maybeShowIosInstallPrompt() {
     if (!els.iosInstallDialog.open) els.iosInstallDialog.showModal();
     sessionStorage.setItem(IOS_INSTALL_HIDE_KEY, "1");
   }, 700);
+}
+
+function maybeShowGeminiKeyPrompt() {
+  const settings = loadSettings();
+  if (settings.geminiKey) return;
+  window.setTimeout(() => {
+    if (!els.geminiKeyDialog.open && !els.iosInstallDialog.open) {
+      els.geminiKeyDialog.showModal();
+    }
+  }, 1100);
 }
 
 function profileStatsSummary(profile) {
@@ -1104,6 +1121,7 @@ renderLibrary();
 if (loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
 registerServiceWorker().catch(() => {});
 maybeShowIosInstallPrompt();
+maybeShowGeminiKeyPrompt();
 refreshLibrary().then(() => {
   const settings = loadSettings();
   const todayCount = loadStore().passages.filter((item) => item.date === todayIso()).length;

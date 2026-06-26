@@ -311,6 +311,18 @@ input {
   line-height: 1.45;
 }
 
+.steps {
+  margin: 12px 0;
+  padding-left: 22px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.steps a {
+  color: var(--accent);
+  font-weight: 750;
+}
+
 .textButton {
   background: transparent;
   color: var(--accent);
