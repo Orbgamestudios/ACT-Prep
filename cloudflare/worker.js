@@ -106,6 +106,7 @@ export default {
       const profile = existing || {
         name,
         pinHash,
+        xp: Math.max(0, Number(body.localXp || 0)),
         completed: {},
         createdAt: new Date().toISOString()
       };
@@ -130,9 +131,16 @@ export default {
         return json({ ok: false, error: "That PIN does not match this profile." }, 401);
       }
 
+      const previous = profile.completed?.[passageId];
+      const completion = sanitizeCompletion(body.completion);
+      if (!previous?.expAwarded && completion.expAwarded) {
+        profile.xp = Number(profile.xp || 0) + completion.expAwarded;
+      } else if (previous?.expAwarded) {
+        completion.expAwarded = previous.expAwarded;
+      }
       profile.completed = {
         ...(profile.completed || {}),
-        [passageId]: sanitizeCompletion(body.completion)
+        [passageId]: completion
       };
       profile.updatedAt = new Date().toISOString();
       await env.ACT_PASSAGES.put(key, JSON.stringify(profile));
@@ -252,6 +260,7 @@ function publicProfile(profile, pin) {
   return {
     name: profile.name,
     pin,
+    xp: Number(profile.xp || 0),
     completed: profile.completed || {},
     generated: profile.generated || [],
     createdAt: profile.createdAt,
@@ -280,7 +289,8 @@ function sanitizeCompletion(completion = {}) {
     answers: completion.answers || {},
     score: Number(completion.score || 0),
     total: Number(completion.total || 0),
-    completedAt: completion.completedAt || new Date().toISOString()
+    completedAt: completion.completedAt || new Date().toISOString(),
+    expAwarded: Math.max(0, Number(completion.expAwarded || 0))
   };
 }
 

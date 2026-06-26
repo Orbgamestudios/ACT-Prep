@@ -2,11 +2,14 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const STORE_KEY = "actLikeReadingLab";
 const SETTINGS_KEY = "actLikeReadingLabSettings";
 const PROFILE_KEY = "actLikeReadingLabProfile";
+const PROGRESS_KEY = "actLikeReadingLabProgress";
 const IOS_INSTALL_HIDE_KEY = "actLikeReadingLabHideIosInstall";
 const TODAY_COUNT = 2;
 const DEFAULT_WORKER_URL = "https://actprep.solitary-sky-76c1.workers.dev";
 const PASSAGE_TARGET_SECONDS = 10 * 60;
 const PASSAGE_WARN_SECONDS = PASSAGE_TARGET_SECONDS - 30;
+const XP_PER_CORRECT = 10;
+const LEVEL_XP_REQUIREMENTS = [150, 250, 350, 500, 650, 800, 1000];
 
 const LOCAL_PASSAGES = [
   {
@@ -108,6 +111,7 @@ const els = {
   workerUrl: document.querySelector("#workerUrl"),
   syncToken: document.querySelector("#syncToken"),
   autoDaily: document.querySelector("#autoDaily"),
+  adaptiveDifficulty: document.querySelector("#adaptiveDifficulty"),
   loadDate: document.querySelector("#loadDate"),
   loadDateButton: document.querySelector("#loadDateButton"),
   saveSettings: document.querySelector("#saveSettings"),
@@ -249,6 +253,63 @@ function saveProfile(profile) {
     return;
   }
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
+function loadLocalProgress() {
+  try {
+    return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || { xp: 0 };
+  } catch {
+    return { xp: 0 };
+  }
+}
+
+function saveLocalProgress(progress) {
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+}
+
+function xpNeededForLevel(level) {
+  if (level <= LEVEL_XP_REQUIREMENTS.length) return LEVEL_XP_REQUIREMENTS[level - 1];
+  return Math.round(1000 * Math.pow(1.18, level - LEVEL_XP_REQUIREMENTS.length));
+}
+
+function levelFromXp(xp) {
+  let level = 1;
+  let remaining = Math.max(0, Number(xp || 0));
+  while (remaining >= xpNeededForLevel(level)) {
+    remaining -= xpNeededForLevel(level);
+    level += 1;
+  }
+  return {
+    level,
+    xpIntoLevel: remaining,
+    xpForNext: xpNeededForLevel(level),
+    totalXp: Math.max(0, Number(xp || 0))
+  };
+}
+
+function currentProgress() {
+  const profile = loadProfile();
+  return levelFromXp(profile?.xp ?? loadLocalProgress().xp ?? 0);
+}
+
+function addLocalXp(amount) {
+  const progress = loadLocalProgress();
+  progress.xp = Math.max(0, Number(progress.xp || 0)) + amount;
+  saveLocalProgress(progress);
+}
+
+function difficultyInstruction(settings) {
+  if (settings.adaptiveDifficulty === false) {
+    return "Difficulty mode: standard ACT-like. Keep passages and questions at normal ACT Reading difficulty.";
+  }
+
+  const progress = currentProgress();
+  const tier = Math.min(6, Math.max(0, progress.level - 1));
+  return [
+    `Adaptive difficulty: level ${progress.level}. Make this set slightly harder than standard ACT by tier ${tier}, without becoming unrealistic or requiring outside knowledge.`,
+    "As difficulty rises, prefer denser public-domain excerpts, more subtle inference/function/synthesis questions, closer paraphrase distractors, and fewer obvious line-by-line retrieval questions.",
+    "Keep exactly one correct answer, keep all answers text-supported, and do not make the set obscure through trick wording."
+  ].join("\n");
 }
 
 function showMessage(title, body) {
@@ -519,7 +580,7 @@ async function submitProfile(mode) {
     const data = await requestWorker(`/api/profile/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, pin })
+      body: JSON.stringify({ name, pin, localXp: loadLocalProgress().xp || 0 })
     });
     saveProfile(data.profile);
     applyCompletionsToStore(data.profile.completed || {});
@@ -850,6 +911,7 @@ async function submitAnswers(event) {
   event.preventDefault();
   const item = loadStore().passages.find((passage) => passage.id === selectedId);
   if (!item) return;
+  const wasCompleted = Boolean(item.completed);
   const answers = selectedAnswers(item);
   const unanswered = Object.values(answers).filter((answer) => !answer).length;
   if (unanswered) {
@@ -862,27 +924,30 @@ async function submitAnswers(event) {
   els.submitAnswers.textContent = "Answers Shown";
   els.scoreSummary.textContent = `Score: ${score}/${item.questions.length}`;
   gradeVisibleAnswers(answers);
-  await markCompleted(item, answers, score);
+  await markCompleted(item, answers, score, wasCompleted);
 }
 
-async function markCompleted(item, answers, score) {
+async function markCompleted(item, answers, score, wasCompleted = false) {
   const completedAt = new Date().toISOString();
+  const expAwarded = wasCompleted ? 0 : score * XP_PER_CORRECT;
   const store = loadStore();
   store.passages = store.passages.map((passage) => passage.id === item.id
-    ? { ...passage, completed: true, answers, score, completedAt }
+    ? { ...passage, completed: true, answers, score, completedAt, expAwarded: (passage.expAwarded || 0) + expAwarded }
     : passage);
   saveStore(store);
 
   const profile = loadProfile();
+  if (!profile && expAwarded) addLocalXp(expAwarded);
   if (profile) {
+    if (expAwarded) profile.xp = Number(profile.xp || 0) + expAwarded;
     profile.completed = {
       ...(profile.completed || {}),
-      [item.id]: { answers, score, total: item.questions.length, completedAt }
+      [item.id]: { answers, score, total: item.questions.length, completedAt, expAwarded }
     };
     saveProfile(profile);
     updateProfileUi();
     try {
-      await requestWorker("/api/profile/complete", {
+      const data = await requestWorker("/api/profile/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -892,10 +957,12 @@ async function markCompleted(item, answers, score) {
           completion: profile.completed[item.id]
         })
       });
+      if (data.profile) saveProfile(data.profile);
     } catch (error) {
       console.warn(error.message);
     }
   }
+  updateProfileUi();
   renderLibrary();
 }
 
@@ -904,7 +971,8 @@ function settingsFromInputs() {
     geminiKey: els.geminiKey.value.trim(),
     workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
     syncToken: syncTokenValue(),
-    autoDaily: els.autoDaily.checked
+    autoDaily: els.autoDaily.checked,
+    adaptiveDifficulty: els.adaptiveDifficulty.checked
   };
 }
 
@@ -932,6 +1000,7 @@ async function generatePassageBatch({ extra = false } = {}) {
       if (!response.ok) throw new Error("Could not load question-construction.md.");
       return response.text();
     });
+    const generationGuide = `${guide}\n\n## Difficulty Mode\n\n${difficultyInstruction(settings)}`;
 
     const generated = [];
     const existingSlots = existing.map((item) => Number(item.slot || item.id?.split("-").pop() || 0));
@@ -942,12 +1011,12 @@ async function generatePassageBatch({ extra = false } = {}) {
       els.generateToday.textContent = extra ? "Generating extra..." : `Generating ${offset + 1}/${targetCount}...`;
       let workerItem = null;
       try {
-        workerItem = await generateWithWorker(date, slot, guide, key);
+        workerItem = await generateWithWorker(date, slot, generationGuide, key);
       } catch (error) {
         if (settings.workerUrl) throw error;
         console.warn(error.message);
       }
-      generated.push(workerItem || await generatePracticeSet(date, slot, key, guide));
+      generated.push(workerItem || await generatePracticeSet(date, slot, key, generationGuide));
     }
 
     upsertPassages(generated);
@@ -993,6 +1062,7 @@ function initSettings() {
   els.workerUrl.value = settings.workerUrl || DEFAULT_WORKER_URL;
   if (els.syncToken) els.syncToken.value = settings.syncToken || "";
   els.autoDaily.checked = settings.autoDaily !== false;
+  els.adaptiveDifficulty.checked = settings.adaptiveDifficulty !== false;
   els.loadDate.value = todayIso();
   updateStatus();
   updateProfileUi();
@@ -1021,7 +1091,8 @@ function wireEvents() {
       geminiKey: els.geminiKey.value.trim(),
       workerUrl: normalizeWorkerUrl(els.workerUrl.value),
       syncToken: syncTokenValue(),
-      autoDaily: els.autoDaily.checked
+      autoDaily: els.autoDaily.checked,
+      adaptiveDifficulty: els.adaptiveDifficulty.checked
     });
     updateStatus();
     showMessage("Saved", "Settings were saved in this browser.");
@@ -1126,7 +1197,8 @@ function profileStatsSummary(profile) {
   return {
     accuracy: total ? Math.round((earned / total) * 100) : 0,
     count: recent.length,
-    completed: completedItems.length
+    completed: completedItems.length,
+    progress: levelFromXp(profile?.xp ?? loadLocalProgress().xp ?? 0)
   };
 }
 
@@ -1137,7 +1209,7 @@ function updateProfileUi() {
   els.profileStatus.textContent = profile ? `${profile.name} · ${summary.completed} completed` : "Not signed in";
   els.profilePill.textContent = profile ? "Signed in" : "Guest";
   els.profileDetails.textContent = profile
-    ? `${profile.name} · ${summary.accuracy}% accuracy across the last ${summary.count} passage${summary.count === 1 ? "" : "s"}.`
+    ? `${profile.name} · Level ${summary.progress.level} · ${summary.accuracy}% accuracy across the last ${summary.count} passage${summary.count === 1 ? "" : "s"}.`
     : "Sign in to sync completed passages across devices.";
   els.loginProfile.hidden = Boolean(profile);
   els.createProfile.hidden = Boolean(profile);
@@ -1152,6 +1224,8 @@ function renderStats() {
   els.statsSummary.innerHTML = `
     <div class="stat"><strong>${summary.accuracy}%</strong><span>Last 10 accuracy</span></div>
     <div class="stat"><strong>${summary.completed}</strong><span>Completed</span></div>
+    <div class="stat"><strong>${summary.progress.level}</strong><span>Level</span></div>
+    <div class="stat"><strong>${summary.progress.xpIntoLevel}/${summary.progress.xpForNext}</strong><span>XP to next</span></div>
   `;
 
   const completed = Object.values(profile?.completed || {});
