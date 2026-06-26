@@ -212,9 +212,18 @@ h2 {
 
 .dateRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
+}
+
+.dateRow .field {
+  min-width: 0;
+}
+
+.dateRow button {
+  min-width: 82px;
+  white-space: nowrap;
 }
 
 input {
@@ -535,6 +544,10 @@ dialog::backdrop {
   }
 
   .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .dateRow {
     grid-template-columns: 1fr;
   }
 
