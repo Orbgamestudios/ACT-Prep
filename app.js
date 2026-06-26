@@ -2,6 +2,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const STORE_KEY = "actLikeReadingLab";
 const SETTINGS_KEY = "actLikeReadingLabSettings";
 const PROFILE_KEY = "actLikeReadingLabProfile";
+const IOS_INSTALL_HIDE_KEY = "actLikeReadingLabHideIosInstall";
 const TODAY_COUNT = 2;
 const DEFAULT_WORKER_URL = "https://actprep.solitary-sky-76c1.workers.dev";
 
@@ -138,6 +139,9 @@ const els = {
   statsDialog: document.querySelector("#statsDialog"),
   statsSummary: document.querySelector("#statsSummary"),
   accuracyChart: document.querySelector("#accuracyChart"),
+  iosInstallDialog: document.querySelector("#iosInstallDialog"),
+  hideIosInstall: document.querySelector("#hideIosInstall"),
+  hideIosInstallForever: document.querySelector("#hideIosInstallForever"),
   dialog: document.querySelector("#messageDialog"),
   dialogTitle: document.querySelector("#dialogTitle"),
   dialogBody: document.querySelector("#dialogBody")
@@ -934,6 +938,11 @@ function wireEvents() {
     showMessage("Saved", "Settings were saved in this browser.");
   });
   els.forceUpdate.addEventListener("click", forceUpdateApp);
+  els.hideIosInstall.addEventListener("click", () => els.iosInstallDialog.close());
+  els.hideIosInstallForever.addEventListener("click", () => {
+    localStorage.setItem(IOS_INSTALL_HIDE_KEY, "1");
+    els.iosInstallDialog.close();
+  });
 
   els.generateToday.addEventListener("click", generateToday);
   els.generateExtra.addEventListener("click", generateExtraPassage);
@@ -981,6 +990,20 @@ async function forceUpdateApp() {
   } finally {
     window.location.href = `${window.location.pathname}?fresh=${Date.now()}`;
   }
+}
+
+function maybeShowIosInstallPrompt() {
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+  const hiddenThisSession = sessionStorage.getItem(IOS_INSTALL_HIDE_KEY) === "1";
+  const hiddenForever = localStorage.getItem(IOS_INSTALL_HIDE_KEY) === "1";
+
+  if (!isIos || isStandalone || hiddenThisSession || hiddenForever) return;
+  window.setTimeout(() => {
+    if (!els.iosInstallDialog.open) els.iosInstallDialog.showModal();
+    sessionStorage.setItem(IOS_INSTALL_HIDE_KEY, "1");
+  }, 700);
 }
 
 function profileStatsSummary(profile) {
@@ -1080,6 +1103,7 @@ wireEvents();
 renderLibrary();
 if (loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
 registerServiceWorker().catch(() => {});
+maybeShowIosInstallPrompt();
 refreshLibrary().then(() => {
   const settings = loadSettings();
   const todayCount = loadStore().passages.filter((item) => item.date === todayIso()).length;
