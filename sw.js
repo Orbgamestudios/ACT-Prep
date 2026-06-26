@@ -1,9 +1,9 @@
-const CACHE_NAME = "act-like-reading-lab-v11";
+const CACHE_NAME = "act-like-reading-lab-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./style.css?v=2",
-  "./app.js?v=11",
+  "./style.css?v=3",
+  "./app.js?v=12",
   "./manifest.webmanifest",
   "./question-construction.md",
   "./icon.svg"

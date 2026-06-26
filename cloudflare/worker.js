@@ -79,7 +79,8 @@ export default {
         updatedAt: new Date().toISOString()
       }));
 
-      return json({ ok: true, item });
+      const profile = await attachGeneratedToProfile(env, body.profile, item);
+      return json({ ok: true, item, profile });
     }
 
     if ((url.pathname === "/api/profile/login" || url.pathname === "/api/profile/create") && request.method === "POST") {
@@ -199,9 +200,26 @@ function publicProfile(profile, pin) {
     name: profile.name,
     pin,
     completed: profile.completed || {},
+    generated: profile.generated || [],
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt || profile.lastLoginAt
   };
+}
+
+async function attachGeneratedToProfile(env, profileInput, item) {
+  if (!profileInput?.name || !/^\d{4}$/.test(String(profileInput.pin || ""))) return null;
+  const name = cleanName(profileInput.name);
+  const pin = String(profileInput.pin || "");
+  const key = profileKey(name);
+  const profile = await env.ACT_PASSAGES.get(key, "json");
+  if (!profile || profile.pinHash !== await hashPin(name, pin)) return null;
+
+  const generated = Array.isArray(profile.generated) ? profile.generated : [];
+  const ref = { id: item.id, date: item.date, title: item.title, createdAt: item.createdAt };
+  profile.generated = [ref, ...generated.filter((entry) => entry.id !== item.id)].slice(0, 200);
+  profile.updatedAt = new Date().toISOString();
+  await env.ACT_PASSAGES.put(key, JSON.stringify(profile));
+  return publicProfile(profile, pin);
 }
 
 function sanitizeCompletion(completion = {}) {

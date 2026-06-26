@@ -101,6 +101,7 @@ const els = {
   geminiKey: document.querySelector("#geminiKey"),
   settingsButton: document.querySelector("#settingsButton"),
   profileButton: document.querySelector("#profileButton"),
+  statsButton: document.querySelector("#statsButton"),
   workerUrl: document.querySelector("#workerUrl"),
   syncToken: document.querySelector("#syncToken"),
   autoDaily: document.querySelector("#autoDaily"),
@@ -112,7 +113,7 @@ const els = {
   generateExtra: document.querySelector("#generateExtra"),
   refreshLibrary: document.querySelector("#refreshLibrary"),
   library: document.querySelector("#library"),
-  profileStats: document.querySelector("#profileStats"),
+  showMoreLibrary: document.querySelector("#showMoreLibrary"),
   statusPill: document.querySelector("#statusPill"),
   emptyState: document.querySelector("#emptyState"),
   practiceView: document.querySelector("#practiceView"),
@@ -134,6 +135,9 @@ const els = {
   profileStatus: document.querySelector("#profileStatus"),
   profilePill: document.querySelector("#profilePill"),
   profileDetails: document.querySelector("#profileDetails"),
+  statsDialog: document.querySelector("#statsDialog"),
+  statsSummary: document.querySelector("#statsSummary"),
+  accuracyChart: document.querySelector("#accuracyChart"),
   dialog: document.querySelector("#messageDialog"),
   dialogTitle: document.querySelector("#dialogTitle"),
   dialogBody: document.querySelector("#dialogBody")
@@ -142,6 +146,7 @@ const els = {
 let deferredInstall = null;
 let selectedId = null;
 let answersVisible = false;
+let libraryVisibleCount = 5;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -460,6 +465,7 @@ async function submitProfile(mode) {
     });
     saveProfile(data.profile);
     applyCompletionsToStore(data.profile.completed || {});
+    await loadProfileGeneratedPassages(data.profile);
     updateProfileUi();
     renderLibrary();
     showMessage(mode === "create" ? "Account created" : "Signed in", `Profile ready for ${data.profile.name}.`);
@@ -469,6 +475,20 @@ async function submitProfile(mode) {
     els.loginProfile.disabled = false;
     els.createProfile.disabled = false;
   }
+}
+
+async function loadProfileGeneratedPassages(profile) {
+  const generated = Array.isArray(profile?.generated) ? profile.generated : [];
+  const dates = [...new Set(generated.map((item) => item.date).filter(Boolean))];
+  for (const date of dates) {
+    try {
+      const cloudItems = await fetchFromCloudflare(date);
+      if (cloudItems.length) upsertPassages(cloudItems);
+    } catch (error) {
+      console.warn(error.message);
+    }
+  }
+  applyCompletionsToStore(profile.completed || {});
 }
 
 function applyCompletionsToStore(completed) {
@@ -488,13 +508,19 @@ async function generateWithWorker(date, slot, guide, key) {
   const base = normalizeWorkerUrl(workerUrl);
   if (!base) return null;
 
+  const profile = loadProfile();
   const response = await fetch(`${base}/api/generate`, {
     method: "POST",
     headers: {
       ...cloudHeaders(syncToken),
       "x-gemini-key": key
     },
-    body: JSON.stringify({ date, slot, guide })
+    body: JSON.stringify({
+      date,
+      slot,
+      guide,
+      profile: profile ? { name: profile.name, pin: profile.pin } : null
+    })
   });
 
   if (response.status === 404 || response.status === 405) return null;
@@ -504,6 +530,10 @@ async function generateWithWorker(date, slot, guide, key) {
   }
   const data = await response.json();
   if (!data.item) throw new Error("Worker generation returned no practice set.");
+  if (data.profile) {
+    saveProfile(data.profile);
+    updateProfileUi();
+  }
   return data.item;
 }
 
@@ -881,6 +911,10 @@ function wireEvents() {
     updateProfileUi();
     els.profileDialog.showModal();
   });
+  els.statsButton.addEventListener("click", () => {
+    renderStats();
+    els.statsDialog.showModal();
+  });
   els.loginProfile.addEventListener("click", () => submitProfile("login"));
   els.createProfile.addEventListener("click", () => submitProfile("create"));
   els.logoutProfile.addEventListener("click", () => {
@@ -903,6 +937,10 @@ function wireEvents() {
 
   els.generateToday.addEventListener("click", generateToday);
   els.generateExtra.addEventListener("click", generateExtraPassage);
+  els.showMoreLibrary.addEventListener("click", () => {
+    libraryVisibleCount += 5;
+    renderLibrary();
+  });
   els.refreshLibrary.addEventListener("click", () => refreshLibrary(todayIso()));
   els.loadDateButton.addEventListener("click", () => refreshLibrary(els.loadDate.value || todayIso()));
   els.questionForm.addEventListener("submit", submitAnswers);
@@ -943,6 +981,98 @@ async function forceUpdateApp() {
   } finally {
     window.location.href = `${window.location.pathname}?fresh=${Date.now()}`;
   }
+}
+
+function profileStatsSummary(profile) {
+  const completedItems = Object.values(profile?.completed || {}).sort((a, b) =>
+    String(b.completedAt || "").localeCompare(String(a.completedAt || ""))
+  );
+  const recent = completedItems.slice(0, 10);
+  const earned = recent.reduce((sum, item) => sum + Number(item.score || 0), 0);
+  const total = recent.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  return {
+    accuracy: total ? Math.round((earned / total) * 100) : 0,
+    count: recent.length,
+    completed: completedItems.length
+  };
+}
+
+function updateProfileUi() {
+  const profile = loadProfile();
+  const summary = profileStatsSummary(profile);
+  els.profileButton.textContent = profile ? profile.name : "Profile";
+  els.profileStatus.textContent = profile ? `${profile.name} · ${summary.completed} completed` : "Not signed in";
+  els.profilePill.textContent = profile ? "Signed in" : "Guest";
+  els.profileDetails.textContent = profile
+    ? `${profile.name} · ${summary.accuracy}% accuracy across the last ${summary.count} passage${summary.count === 1 ? "" : "s"}.`
+    : "Sign in to sync completed passages across devices.";
+  els.loginProfile.hidden = Boolean(profile);
+  els.createProfile.hidden = Boolean(profile);
+  els.logoutProfile.hidden = !profile;
+  els.profileName.value = profile?.name || "";
+  els.profilePin.value = "";
+}
+
+function renderStats() {
+  const profile = loadProfile();
+  const summary = profileStatsSummary(profile);
+  els.statsSummary.innerHTML = `
+    <div class="stat"><strong>${summary.accuracy}%</strong><span>Last 10 accuracy</span></div>
+    <div class="stat"><strong>${summary.completed}</strong><span>Completed</span></div>
+  `;
+
+  const completed = Object.values(profile?.completed || {});
+  const days = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i -= 1) {
+    const day = new Date(now);
+    day.setDate(now.getDate() - i);
+    const iso = day.toISOString().slice(0, 10);
+    const items = completed.filter((item) => String(item.completedAt || "").slice(0, 10) === iso);
+    const earned = items.reduce((sum, item) => sum + Number(item.score || 0), 0);
+    const total = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    days.push({
+      label: day.toLocaleDateString(undefined, { weekday: "short" }),
+      accuracy: total ? Math.round((earned / total) * 100) : 0
+    });
+  }
+
+  els.accuracyChart.innerHTML = days.map((day) => `
+    <div class="barWrap">
+      <div class="bar" style="height:${Math.max(4, day.accuracy)}%"></div>
+      <div class="barValue">${day.accuracy}%</div>
+      <div class="barLabel">${day.label}</div>
+    </div>
+  `).join("");
+}
+
+function renderLibrary() {
+  const store = loadStore();
+  els.library.innerHTML = "";
+
+  if (!store.passages.length) {
+    const empty = document.createElement("p");
+    empty.className = "finePrint";
+    empty.textContent = "No saved practice sets yet.";
+    els.library.append(empty);
+    els.showMoreLibrary.hidden = true;
+    return;
+  }
+
+  const visible = store.passages.slice(0, libraryVisibleCount);
+  visible.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `libraryItem${item.id === selectedId ? " active" : ""}`;
+    button.innerHTML = `<strong></strong><span></span>`;
+    button.querySelector("strong").textContent = item.title;
+    const done = item.completed ? ` · Completed ${item.score ?? ""}/${item.questions.length}` : "";
+    button.querySelector("span").textContent = `${item.date} · ${item.passageType} · ${item.questions.length} questions${done}`;
+    button.addEventListener("click", () => selectPractice(item.id));
+    els.library.append(button);
+  });
+
+  els.showMoreLibrary.hidden = store.passages.length <= libraryVisibleCount;
 }
 
 initSettings();

@@ -254,6 +254,42 @@ input {
   background: var(--paper);
 }
 
+.chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(28px, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 190px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.barWrap {
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  gap: 6px;
+  min-height: 160px;
+  text-align: center;
+}
+
+.bar {
+  align-self: end;
+  width: 100%;
+  min-height: 4px;
+  border-radius: 5px 5px 0 0;
+  background: var(--accent-2);
+}
+
+.barValue,
+.barLabel {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
 .stat {
   min-width: 0;
 }
