@@ -205,6 +205,10 @@ function setBusy(isBusy, label = "Generate Today") {
   els.generateToday.textContent = isBusy ? "Working..." : label;
 }
 
+function syncTokenValue() {
+  return els.syncToken?.value?.trim() || "";
+}
+
 function updateStatus() {
   const settings = loadSettings();
   els.statusPill.textContent = settings.workerUrl ? "Cloud" : "Local";
@@ -776,18 +780,13 @@ function settingsFromInputs() {
   return {
     geminiKey: els.geminiKey.value.trim(),
     workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
-    syncToken: els.syncToken.value.trim(),
+    syncToken: syncTokenValue(),
     autoDaily: els.autoDaily.checked
   };
 }
 
 async function generatePassageBatch({ extra = false } = {}) {
-  const settings = {
-    geminiKey: els.geminiKey.value.trim(),
-    workerUrl: normalizeWorkerUrl(els.workerUrl.value) || DEFAULT_WORKER_URL,
-    syncToken: els.syncToken.value.trim(),
-    autoDaily: els.autoDaily.checked
-  };
+  const settings = settingsFromInputs();
   saveSettings(settings);
   updateStatus();
 
@@ -829,11 +828,6 @@ async function generatePassageBatch({ extra = false } = {}) {
     }
 
     upsertPassages(generated);
-    try {
-      await syncToCloudflare(loadStore().passages.filter((item) => item.date === date));
-    } catch (error) {
-      console.warn(error.message);
-    }
     renderLibrary();
     selectPractice(generated[0].id);
   } catch (error) {
@@ -873,7 +867,7 @@ function initSettings() {
   if (emptyCopy) emptyCopy.textContent = "Select a saved passage or generate a new one.";
   els.geminiKey.value = settings.geminiKey || "";
   els.workerUrl.value = settings.workerUrl || DEFAULT_WORKER_URL;
-  els.syncToken.value = settings.syncToken || "";
+  if (els.syncToken) els.syncToken.value = settings.syncToken || "";
   els.autoDaily.checked = settings.autoDaily !== false;
   els.loadDate.value = todayIso();
   updateStatus();
@@ -898,7 +892,7 @@ function wireEvents() {
     saveSettings({
       geminiKey: els.geminiKey.value.trim(),
       workerUrl: normalizeWorkerUrl(els.workerUrl.value),
-      syncToken: els.syncToken.value.trim(),
+      syncToken: syncTokenValue(),
       autoDaily: els.autoDaily.checked
     });
     updateStatus();
