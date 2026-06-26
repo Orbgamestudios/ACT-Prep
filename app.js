@@ -520,6 +520,16 @@ async function loadProfileGeneratedPassages(profile) {
   applyCompletionsToStore(profile.completed || {});
 }
 
+async function syncSignedInProfileLibrary() {
+  const profile = loadProfile();
+  if (!profile) return;
+  await importLocalPassagesToProfile();
+  await loadProfileGeneratedPassages(loadProfile());
+  updateProfileUi();
+  renderLibrary();
+  if (!selectedId && loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
+}
+
 function applyCompletionsToStore(completed) {
   const store = loadStore();
   store.passages = store.passages.map((item) => ({
@@ -888,6 +898,7 @@ async function generatePassageBatch({ extra = false } = {}) {
     }
 
     upsertPassages(generated);
+    await syncSignedInProfileLibrary();
     renderLibrary();
     selectPractice(generated[0].id);
   } catch (error) {
@@ -1145,6 +1156,7 @@ if (loadStore().passages[0]) selectPractice(loadStore().passages[0].id);
 registerServiceWorker().catch(() => {});
 maybeShowIosInstallPrompt();
 maybeShowGeminiKeyPrompt();
+syncSignedInProfileLibrary().catch((error) => console.warn(error.message));
 refreshLibrary().then(() => {
   const settings = loadSettings();
   const todayCount = loadStore().passages.filter((item) => item.date === todayIso()).length;
