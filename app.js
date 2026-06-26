@@ -5,6 +5,8 @@ const PROFILE_KEY = "actLikeReadingLabProfile";
 const IOS_INSTALL_HIDE_KEY = "actLikeReadingLabHideIosInstall";
 const TODAY_COUNT = 2;
 const DEFAULT_WORKER_URL = "https://actprep.solitary-sky-76c1.workers.dev";
+const PASSAGE_TARGET_SECONDS = 10 * 60;
+const PASSAGE_WARN_SECONDS = PASSAGE_TARGET_SECONDS - 30;
 
 const LOCAL_PASSAGES = [
   {
@@ -120,6 +122,9 @@ const els = {
   practiceView: document.querySelector("#practiceView"),
   practiceMeta: document.querySelector("#practiceMeta"),
   practiceTitle: document.querySelector("#practiceTitle"),
+  passageTimer: document.querySelector("#passageTimer"),
+  timerInfo: document.querySelector("#timerInfo"),
+  timerInfoDialog: document.querySelector("#timerInfoDialog"),
   passageText: document.querySelector("#passageText"),
   questionForm: document.querySelector("#questionForm"),
   questions: document.querySelector("#questions"),
@@ -153,6 +158,9 @@ let deferredInstall = null;
 let selectedId = null;
 let answersVisible = false;
 let libraryVisibleCount = 5;
+let timerInterval = null;
+let timerPassageId = null;
+let timerStartedAt = null;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -181,6 +189,50 @@ function loadStore() {
 
 function saveStore(store) {
   localStorage.setItem(STORE_KEY, JSON.stringify(store));
+}
+
+function currentTimerSeconds() {
+  const item = loadStore().passages.find((passage) => passage.id === timerPassageId);
+  if (!item) return 0;
+  const base = Number(item.elapsedSeconds || 0);
+  const live = timerStartedAt ? Math.floor((Date.now() - timerStartedAt) / 1000) : 0;
+  return base + live;
+}
+
+function saveCurrentTimer() {
+  if (!timerPassageId || !timerStartedAt) return;
+  const elapsed = currentTimerSeconds();
+  const store = loadStore();
+  store.passages = store.passages.map((passage) => passage.id === timerPassageId
+    ? { ...passage, elapsedSeconds: elapsed }
+    : passage);
+  saveStore(store);
+  timerStartedAt = Date.now();
+}
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function updateTimerDisplay() {
+  const seconds = currentTimerSeconds();
+  els.passageTimer.textContent = formatTime(seconds);
+  els.passageTimer.classList.toggle("warn", seconds >= PASSAGE_WARN_SECONDS && seconds < PASSAGE_TARGET_SECONDS);
+  els.passageTimer.classList.toggle("over", seconds >= PASSAGE_TARGET_SECONDS);
+}
+
+function startPassageTimer(id) {
+  saveCurrentTimer();
+  timerPassageId = id;
+  timerStartedAt = Date.now();
+  window.clearInterval(timerInterval);
+  updateTimerDisplay();
+  timerInterval = window.setInterval(() => {
+    updateTimerDisplay();
+    if (currentTimerSeconds() % 15 === 0) saveCurrentTimer();
+  }, 1000);
 }
 
 function loadProfile() {
@@ -732,6 +784,7 @@ function selectPractice(id) {
   els.practiceTitle.textContent = item.title;
   els.passageText.innerHTML = passageHtml(item.passage);
   renderQuestions(item);
+  startPassageTimer(item.id);
   if (item.completed) {
     els.questionForm.classList.add("answersVisible");
     gradeVisibleAnswers(item.answers || {});
@@ -974,6 +1027,7 @@ function wireEvents() {
     showMessage("Saved", "Settings were saved in this browser.");
   });
   els.forceUpdate.addEventListener("click", forceUpdateApp);
+  els.timerInfo.addEventListener("click", () => els.timerInfoDialog.showModal());
   els.hideIosInstall.addEventListener("click", () => els.iosInstallDialog.close());
   els.hideIosInstallForever.addEventListener("click", () => {
     localStorage.setItem(IOS_INSTALL_HIDE_KEY, "1");
@@ -999,6 +1053,11 @@ function wireEvents() {
     event.preventDefault();
     deferredInstall = event;
     els.installButton.hidden = false;
+  });
+
+  window.addEventListener("beforeunload", saveCurrentTimer);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) saveCurrentTimer();
   });
 
   els.installButton.addEventListener("click", async () => {

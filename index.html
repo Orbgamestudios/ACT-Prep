@@ -49,6 +49,10 @@
             <p id="practiceMeta" class="eyebrow"></p>
             <h2 id="practiceTitle"></h2>
           </div>
+          <div class="timerBox" aria-live="polite">
+            <button id="timerInfo" class="timerInfo" type="button" aria-label="Timer information">i</button>
+            <span id="passageTimer" class="timer">00:00</span>
+          </div>
         </div>
 
         <div id="passageText" class="passageText"></div>
@@ -187,6 +191,14 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=17"></script>
+  <dialog id="timerInfoDialog">
+    <form method="dialog">
+      <h2>Passage Timer</h2>
+      <p>The ACT Reading section gives about 10 minutes per passage. This stopwatch turns yellow at 9:30 and red after 10:00, but it never stops your practice.</p>
+      <button type="submit">OK</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=18"></script>
 </body>
 </html>

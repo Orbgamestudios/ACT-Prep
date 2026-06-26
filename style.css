@@ -398,6 +398,52 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
+.timerBox {
+  display: inline-grid;
+  grid-template-columns: 28px auto;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.timerInfo {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  font-weight: 800;
+}
+
+.timer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.timer.warn {
+  border-color: rgba(154, 91, 27, 0.55);
+  background: #fff6df;
+  color: var(--warn);
+}
+
+.timer.over {
+  border-color: rgba(163, 58, 49, 0.55);
+  background: #fff0ee;
+  color: var(--bad);
+}
+
 #practiceTitle {
   font-size: clamp(1.4rem, 3vw, 2.1rem);
 }
@@ -553,6 +599,10 @@ dialog::backdrop {
 
   .submitBar {
     grid-template-columns: 1fr;
+  }
+
+  .practiceHeader {
+    align-items: flex-start;
   }
 
   .practiceView {
